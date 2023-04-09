@@ -51,36 +51,36 @@ void runSemOp(int sem_id, int sem_num, int sem_op, int sem_flg) {
   }
 }
 
-void parent_process(int fd, int sem_id) {
+void parent_process(int *fd, int sem_id) {
   char buffer[BUFSIZE];
   for (int i = 0; i < MSGS_COUNT; ++i) {
     runSemOp(sem_id, 0, 0, SEM_UNDO);
 
     snprintf(buffer, BUFSIZE, "Message %d from parent", i + 1);
-    write(fd, buffer, BUFSIZE);
+    write(fd[1], buffer, BUFSIZE);
     printf("Parent: Sent: %s\n", buffer);
     runSemOp(sem_id, 0, 1, 0);
     runSemOp(sem_id, 1, -1, 0);
 
     runSemOp(sem_id, 0, 0, SEM_UNDO);
 
-    read(fd, buffer, BUFSIZE);
+    read(fd[0], buffer, BUFSIZE);
     printf("Parent: Received: %s\n", buffer);
   }
 
   eraseSemaphore(sem_id);
 }
 
-void child_process(int fd, int sem_id) {
+void child_process(int *fd, int sem_id) {
   char buffer[BUFSIZE];
   for (int i = 0; i < MSGS_COUNT; ++i) {
     runSemOp(sem_id, 1, 0, SEM_UNDO);
 
-    read(fd, buffer, BUFSIZE);
+    read(fd[0], buffer, BUFSIZE);
     printf("Child: Received: %s\n", buffer);
 
     snprintf(buffer, BUFSIZE, "Message %d from child", i + 1);
-    write(fd, buffer, BUFSIZE);
+    write(fd[1], buffer, BUFSIZE);
     printf("Child: Sent: %s\n", buffer);
     runSemOp(sem_id, 1, 1, 0);
     runSemOp(sem_id, 0, -1, 0);
@@ -103,14 +103,12 @@ int main() {
     perror("Error creating child process\n");
     exit(EXIT_FAILURE);
   } else if (pid == 0) {
-    close(fd[1]);
-    child_process(fd[0], sem_id);
-    close(fd[0]);
+    child_process(fd, sem_id);
     exit(EXIT_SUCCESS);
   }
 
+  parent_process(fd, sem_id);
   close(fd[0]);
-  parent_process(fd[1], sem_id);
   close(fd[1]);
 
   return 0;
