@@ -7,6 +7,7 @@
 По завершении обмена обеспечить корректное закрытие каналов и удаление семафора.
 */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,74 +23,62 @@ const int BUFSIZE = 256;
 int getSemaphore() {
   int sem_id = semget(SEM_KEY, 2, IPC_CREAT | 0666);
   if (sem_id < 0) {
-    perror("Error creating semaphore\n");
+    perror("Error creating semaphore: ");
     exit(EXIT_FAILURE);
   }
-
+  semctl(sem_id, 0, SETVAL, 0);
+  semctl(sem_id, 1, SETVAL, 0);
   printf("Semaphore created with id: %d\n", sem_id);
   return sem_id;
 }
 
 void eraseSemaphore(int sem_id) {
   if (semctl(sem_id, 0, IPC_RMID, NULL) < 0) {
-    perror("Error removing semaphore\n");
+    perror("Error removing semaphore: ");
     exit(EXIT_FAILURE);
   }
 }
 
-union sem_union {
-  int val;
-  struct semid_ds *buf;
-  unsigned short *array;
-  struct seminfo *__buf;
-};
-
 void parent_process(int fd, int sem_id) {
   char buffer[BUFSIZE];
-  union sem_union sem_args;
   for (int i = 0; i < MSGS_COUNT; ++i) {
-    sem_args.val = 0;
-    semctl(sem_id, 0, SETVAL, sem_args);
+    semctl(sem_id, 0, SETVAL, 0);
     printf("Parent: ");
-    sprintf(buffer, "Message %d from parent", i + 1);
-    write(fd, buffer, strlen(buffer)+1);
-    semop(sem_id, &(struct sembuf){.sem_num = 0, .sem_op = 1, .sem_flg = 0}, 1);
-    semop(sem_id, &(struct sembuf){.sem_num = 1, .sem_op = -1, .sem_flg = 0}, 1);
+    strncpy(buffer, "Message %d from parent", BUFSIZE);
+    snprintf(buffer, BUFSIZE, "Message %d from parent", i + 1);
+    write(fd, buffer, BUFSIZE);
 
-    sem_args.val = 0;
-    semctl(sem_id, 1, SETVAL, sem_args);
+    semop(sem_id, &(struct sembuf){.sem_num = 1, .sem_op = -1, .sem_flg = 1}, 1);
+    semop(sem_id, &(struct sembuf){.sem_num = 0, .sem_op = 1, .sem_flg = 1}, 1);
 
     read(fd, buffer, BUFSIZE);
     printf("Received: %s\n", buffer);
-    semop(sem_id, &(struct sembuf){.sem_num = 1, .sem_op = 1, .sem_flg = 0}, 1);
-    semop(sem_id, &(struct sembuf){.sem_num = 0, .sem_op = -1, .sem_flg = 0}, 1);
+
+    semop(sem_id, &(struct sembuf){.sem_num = 1, .sem_op = -1, .sem_flg = 1}, 1);
+    semop(sem_id, &(struct sembuf){.sem_num = 0, .sem_op = 1, .sem_flg = 1}, 1);
   }
 }
 
 void child_process(int fd, int sem_id) {
   char buffer[BUFSIZE];
-  union sem_union sem_args;
-
   for (int i = 0; i < MSGS_COUNT; ++i) {
-    sem_args.val = 0;
-    semctl(sem_id, 1, SETVAL, sem_args);
+    semctl(sem_id, 1, SETVAL, 0);
 
-    semop(sem_id, &(struct sembuf){.sem_num = 0, .sem_op = -1}, 1);
+    semop(sem_id, &(struct sembuf){.sem_num = 0, .sem_op = -1, .sem_flg = 0}, 1);
     read(fd, buffer, BUFSIZE);
     printf("Child: Received: %s\n", buffer);
-    semop(sem_id, &(struct sembuf){.sem_num = 1, .sem_op = 1}, 1);
+    semop(sem_id, &(struct sembuf){.sem_num = 1, .sem_op = 1, .sem_flg = 0}, 1);
 
-    sem_args.val = 0;
-    semctl(sem_id, 0, SETVAL, sem_args);
+    semctl(sem_id, 0, SETVAL, 0);
 
     printf("Child: ");
-    sprintf(buffer, "Message %d from child", i + 1);
-    write(fd, buffer, BUFSIZE);
-    semop(sem_id, &(struct sembuf){.sem_num = 0, .sem_op = 1}, 1);
-    semop(sem_id, &(struct sembuf){.sem_num = 1, .sem_op = -1}, 1);
+    strncpy(buffer, "Message %d from child", BUFSIZE);
+    snprintf(buffer, BUFSIZE, "Message %d from child", i + 1);
+    write(fd, buffer, strlen(buffer) + 1);
+    semop(sem_id, &(struct sembuf){.sem_num = 1, .sem_op = -1, .sem_flg = 0}, 1);
+    semop(sem_id, &(struct sembuf){.sem_num = 0, .sem_op = 1, .sem_flg = 0}, 1);
   }
 }
-
 
 int main() {
   int fd[2];
@@ -121,4 +110,3 @@ int main() {
 
   return 0;
 }
-
