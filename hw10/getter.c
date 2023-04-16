@@ -21,7 +21,7 @@ void sendResponse(pid_t pid) {
   }
 }
 
-int getNumber(pid_t sender_pid) {
+int getInt(pid_t sender_pid) {
   int number = 0;
   printf("Binary representation of the number: ");
 
@@ -46,7 +46,7 @@ int main() {
   printf("Enter the pid of the sender: ");
   scanf("%d", &sender_pid);
 
-  int number = getNumber(sender_pid);
+  int number = getInt(sender_pid);
   printf("Received %d from %d\n", number, sender_pid);
 
   return 0;
